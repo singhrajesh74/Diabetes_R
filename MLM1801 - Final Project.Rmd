@@ -1,0 +1,620 @@
+---
+output: 
+  html_document:
+     theme: cerulean
+     highlight: espresso
+     fig_width: 10 
+     fig_height: 8
+     margin: 20%
+---
+<center>
+# MLM1801 - Final Project  
+#### Rajesh Singh  
+##### rajesh_singh@optum.com  
+#####  May 14, 2018
+</center>
+
+<style>
+body {
+text-align: justify}
+</style>
+***
+### Context/Background:
+> Heart disease, or cardiovascular disease, describes a series of conditions that affect the heart. It refers to conditions that involve narrowed or blocked blood vessels that can lead to a heart attack, chest pain (angina), or stroke. Blood vessel diseases, such as coronary artery disease, heart rhythm problems (arrhythmia), and heart defects at birth (congenital heart defects) are all other examples of heart disease.
+<br> Every year about 735,000 Americans have a heart attack. Of these, 525,000 are a first heart attack, and 210,000 happen in people who have already had a heart attack.^1^
+<br> Many forms of heart disease can be prevented or treated with healthy lifestyle choices. This includes quitting smoking, lowering cholesterol, controlling high blood pressure, maintaining a healthy weight, and exercising.
+
+***
+### Hyphothesis:
+> **Null Hypothesis $H_{0}$:** Using only the variables in the UCI Heart Dataset, fail to reject if a person has heart disease.  
+> **Alternative Hyphoyhesis $H_{1}$:** Reject the Hyphotheis we can predict heart disease, using only the data in the UCI Heart Dataset.
+
+***
+### Business opportunity and value proposition:
+> Heart disease and stroke are leading causes of death and disability and the most expensive medical conditions for businesses.^2,3^
+A study published in the Feb. 1, 2017 $Journal of the American Heart Association$, focused on Medicare claims for more than 6,200 people over age 65. Health care costs were about $5,000 less per year in people with the most heart-healthy factors compared with those with the least number of factors. If all Medicare beneficiaries followed heart-healthy habits reduce cardiovascular disease, it would save more than $41 billion a year in Medicare costs.^4^
+
+***
+### References:
+1. https://www.cdc.gov/heartdisease/facts.htm
+2. National Center for Chronic Disease Prevention and Health Promotion, Centers for Disease Control and Prevention. Preventing heart disease and stroke: Addressing the nation's leading killers (CDC At A Glance Report). Atlanta, GA: U.S. Department of Health and Human Services; 2005.
+3. American Heart Association. Heart disease and stroke statistics: 2006 update. Dallas, TX: American Heart Association; 2005.
+4. American Heart Association, 2017.
+
+***
+
+### Project Objectives
+* Select the 4 most appropriate algorithms and make the best case I can to disprove / fail to disprove my hypothesis based on their results, recognizing that my case wull most likley be a "weight of evidence" argument, rather than a "QED" conclusion.
+* Include R code, remembering that I should have a defensible denominator, population and cohort baselines, positive and negative controls, and specification tests.
+* Create a synthetic data set of Random Variables against which my R code will run without errors. I plan to divde my data set into a test and training set to create this synthetic data set.
+* Support my quantative findings with appropriate visualizations.
+* Justify the appropriateness of my 4 chosen ML algorithms.
+* Do not use Linear Regression AND lasso, or ridge, or elastic net, as they are all pretty much the same.
+* Try Random Forest, Elastic Net or Linear, SVM, k-means, Naive Bayes
+
+***
+```{r installPackages, message = FALSE, warning = FALSE}
+# Install packages, and their dependents, IF needed to successfully run this code.
+list.of.packages <- c("xtable", "mice", "VIM", "zoo", "Amelia", "ggplot2", "funModeling", "corrplot", "psych", "caret", "rpart", "rpart.plot", "pROC", "randomForest", "caretEnsemble", "xgboost", "e1071", "gbm", "kableExtra", "funModeling", "acepack")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages, repos = "http://cran.us.r-project.org", dependencies = TRUE)
+```
+
+Download the <b>[UCI Heart Disease Dataset]</b>, if it wasn't already:
+
+[UCI Heart Disease Dataset]: http://archive.ics.uci.edu/ml/datasets/heart+Disease
+``` {r getDataSet}
+if (!file.exists("processed.cleveland.data")) {
+    download.file(url = "http://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data",
+    destfile = "processed.cleveland.data")
+}
+```
+
+Read in the dataset and store into the "<b>heartDiseaseDf</b>" dataframe.
+
+* The dataset does not have column names.
+* The dataset is comma "<b>,</b>" separated. 
+* Spaces " " and question marks "<b>?</b>" will be converted to "<b>NA</b>".
+``` {r saveToDataFrame}
+heartDiseaseDf <- read.csv("processed.cleveland.data" , header = FALSE, sep = ",", na.strings = c("","?"))
+```
+Here is a description of our Dataset:
+```{r displayDescription, echo = FALSE, results = 'asis', message = FALSE}
+require(kableExtra)
+
+text_tbl <- data.frame(
+  Variable_Name = c("Age", 
+                    "Sex", 
+                    "Chest_Pain_Type", 
+                    "Resting_BPS", 
+                    "Cholesterol",
+                    "Fasting_BS",
+                    "Resting_ECG",
+                    "Max_Heart_Rate_Ach",
+                    "Exercise_Induced_Angina",
+                    "Old_Peak",
+                    "Slope",
+                    "CA",
+                    "Thal",
+                    "Diagnosis"),
+  Description = c(
+    "Age of patient",
+    "Gender of patient (0: Female, 1: Male)", 
+    "Chest pain type (1: Typical angine, 2: Atypical angina, 3: Non-anginal pain, 4: Asymptomatic)",
+    "Resting blood pressure (in mm Hg on admission to the hospital)",
+    "Serum cholestoral in mg/dl",
+    "Fasting blood sugar > 120 mg/dl (0: false, 1: true)",
+    "Resting electrocardiographic results (0: Normal, 1: having ST-T wave abnormality (T wave inversions and/or ST elevation or depression of > 0.05 mV), 2: Showing probable or definite left ventricular hypertrophy by Estes' criteria)",
+    "Maximum heart rate achieved",
+    "Exercise induced angina (0: false, 1: true)",
+    "ST depression induced by exercise relative to rest",
+    "Slope Of peak exercise ST segment (1: Upsloping, 2: Flat, 3: Downsloping)",
+    "Number of major vessels (0-3) colored by flourosopy",
+    "Thalassemia (3: Normal; 6: Fixed defect; 7: Reversable defect)",
+    "Diagnosis of heart disease (angiographic disease status)"
+  )
+)
+
+kable(text_tbl, "html") %>%
+  kable_styling(full_width = F) %>%
+  column_spec(1, bold = T, border_right = T) %>%
+  column_spec(2, width = "30em")
+```
+
+Add headers to the dataframe:
+```{r addHeaders}
+names(heartDiseaseDf) <- c("Age",
+                           "Sex",
+                           "Chest_Pain_Type",
+                           "Resting_BPS",
+                           "Cholesterol",
+                           "Fasting_BS",
+                           "Resting_ECG",
+                           "Max_Heart_Rate_Ach",
+                           "Exercise_Induced_Angina",
+                           "Old_Peak",
+                           "Slope",
+                           "CA",
+                           "Thal",
+                           "Diagnosis")
+
+```
+
+Here is a sample of what our dataframe looks like:
+```{r printTable, results = 'asis', message = FALSE}
+require(xtable)
+
+print(xtable(head(heartDiseaseDf,10)), type = "html", include.rownames = F)
+```
+
+<br>
+Get a summary of the dataframe:
+```{r summaryOfData}
+summary(heartDiseaseDf)
+```
+
+Get the structure (numeric, interger, factor, character) of the dataframe:
+```{r structureOfData}
+str(heartDiseaseDf)
+```
+***
+## Data Cleansing
+***
+Let's look for missing data. Although I can use 1 function for this, I will show three to show the different options in R:
+
+* md.pattern (mice Library)
+* mice_plot (VIM Library)
+* missmap (Amelia library)
+
+The output of the above functions will show:
+
+* 297 or 98.02% observations with no missing values.
+* 2 or 0.66% missing values for Thal.
+* 4 or 1.32% missing values for CA.
+
+Let's look at the missing data with md.pattern. 
+<br>The first column represents the number of values:
+
+* 0 indicates missing values.
+* 1 indicates all values found.
+```{r micePattern, message = FALSE}
+require(mice)
+md.pattern(heartDiseaseDf)
+```
+
+Next, let's look at the missing data with "<b>mice_plot</b>":
+```{r micePlot, message = FALSE}
+require(VIM)
+
+mice_plot <- aggr(heartDiseaseDf,ol = c('navyblue','red'),
+                  numbers = TRUE, sortVars = TRUE,
+                  labels = names(heartDiseaseDf), cex.axis = .7,
+                  gap = 3, ylab = c("Missing data","Pattern"))
+```
+
+Last, let's look at the missing data with "<b>missmap</b>":
+```{r amelia, message = FALSE}
+require(Amelia)
+
+missmap(heartDiseaseDf,
+        main = "Missing vs. Observed values",
+        legend = TRUE,
+        col = c("red","lightblue"))
+```
+
+***
+
+With only 6 missing values, we can either drop those records or impute them.
+<br>To drop, we would run the below code:
+```{r dropRecords, eval = FALSE}
+heartDiseaseDf <- na.omit(heartDiseaseDf)
+```
+
+However, I decided to impute the values to show the power for R.
+<br>Let's save the original feature values before imputation to show the difference after:
+```{r beforeAfter}
+heartDiseaseDf.CA.orig <- heartDiseaseDf$CA
+heartDiseaseDf.Thal.orig <- heartDiseaseDf$Thal
+```
+
+Here is an explanation of the parameters used:
+
+* m  - Refers to 5 imputed data sets
+* maxit - Refers to no. of iterations taken to impute missing values
+* method - Refers to method used in imputation. we used predictive mean matching.
+```{r imputeResults, results = "hide"}
+imputed_Data <- mice(heartDiseaseDf, m = 5, maxit = 50, method = 'pmm', seed = 0)
+```
+
+```{r imputeSummary}
+summary(imputed_Data)
+```
+
+Since there are 5 imputed data sets, you can select any one of them, using the "<b>complete()</b>" function.
+I will use the 2^nd^ set out of 5:
+```{r substitute}
+heartDiseaseDf <- complete(imputed_Data,2)
+```
+
+Let's show the difference between the features with missing values to the ones imputed.
+<br>CA before:
+```{r CaOrig}
+heartDiseaseDf.CA.orig
+```
+
+CA after:
+```{r CaAfter}
+heartDiseaseDf$CA
+```
+
+Thal before:
+```{r ThalOrig}
+heartDiseaseDf.Thal.orig
+```
+
+Thal after:
+```{r ThalAfter}
+heartDiseaseDf$Thal
+```
+***
+## Exploratory Data Analysis
+***
+Let's visualize the variables by ploting them:
+```{r ggplotData, message = FALSE}
+require(ggplot2)
+
+melt.heartDiseaseDf <- melt(heartDiseaseDf)
+ggplot(data = melt.heartDiseaseDf, aes(x = value, fill = value)) + 
+stat_density() + 
+facet_wrap(~variable, scales = "free") +
+geom_bar(fill = "purple")
+```
+
+Let's look at the Linear correlation.
+<br>The standard correlation measure for numeric variables is the "<b>Pearson coefficient</b>". 
+<br>It goes from "<b>1</b>", a positive correlation, to "<b>-1</b>", a negative correlation. 
+<br>A value around "<b>0</b>" implies no correlation.
+
+In our Heart Disease study, we'll calculate the Pearson coefficient based on a target variable, "<b>Diagnosis</b>".
+```{r funModeling, message = FALSE}
+require(funModeling)
+
+correlation_table(data = heartDiseaseDf, target = "Diagnosis")
+```
+
+Let's look at the correlation martix.
+<br>Correlations between all features are calculated and visualised with the "<b>corrplot</b>" package.
+<br>The size and shade of each circle represents the strength of each relationship, while the color represents the direction, either negative or positive.
+```{r corrMatrix, message = FALSE, fig.width = 20, fig.height = 20}
+require(corrplot)
+
+corrplot.mixed(cor(heartDiseaseDf),
+               order = "hclust",
+               hclust.method = "median",
+               tl.pos = "lt", 
+               diag = "u", 
+               tl.cex = 2, 
+               tl.srt = 45,
+               number.cex = 2,
+               lower.col = "purple")
+```
+
+***
+Here is another correlation plot to help visualize the data.
+<br>The graph produces the following information:
+
+* Correlation coefficent (r), indicating the strenght of the relationship.
+* Histogram with kernal density estimation and rug plot.
+* Scaller plot with fixed line and ellipses to display the strenght of the relationship.
+```{r pairPanels, message = FALSE, fig.width = 20, fig.height = 20}
+require(psych)
+
+pairs.panels(cor(heartDiseaseDf), scale = TRUE, density = TRUE, ellipse = TRUE, cor = TRUE)
+```
+
+***
+Convert each feature to its correct type, as needed.
+<br>For "<b>Diagnosis</b>", we don't have enough data to predict all the catagories.
+<br>Therefore, we'll replace it with two values, "<b>0</b>" (no) or "<b>1</b>" (yes):
+```{r convertDiagnosis}
+heartDiseaseDf$Diagnosis[heartDiseaseDf$Diagnosis > 0] <- 1
+```
+
+Convert "<b>Sex</b>" to factor; as it's either male or female:
+```{r convertSex}
+heartDiseaseDf$Sex <- as.factor(heartDiseaseDf$Sex)
+```
+
+Convert "<b>Chest_Pain_Type</b>" to factor; it's only 4 different values:
+```{r convertChest_Pain_Type}
+heartDiseaseDf$Chest_Pain_Type <- as.factor(heartDiseaseDf$Chest_Pain_Type)
+```
+
+Convert "<b>Fasting_BS</b>" to factor; as it's either "<b>0</b>" (false) or "<b>1</b>" (true):
+```{r convertFasting_BS} 
+heartDiseaseDf$Fasting_BS <- as.factor(heartDiseaseDf$Fasting_BS)
+```
+
+Convert "<b>Resting_ECG</b>" to factor; it only have 3 values:
+```{r convertResting_ECG}
+heartDiseaseDf$Resting_ECG <- as.factor(heartDiseaseDf$Resting_ECG)
+```
+
+Convert "<b>Exercise_Induced_Angina</b>" to factor; as it's either "<b>0</b>" (no) or "<b>1</b>" (yes):
+```{r convertExercise_Induced_Angina}
+heartDiseaseDf$Exercise_Induced_Angina <- as.factor(heartDiseaseDf$Exercise_Induced_Angina)
+```
+
+Convert "<b>Slope</b>" to factor; it only have 3 values:
+```{r convertSlope}
+heartDiseaseDf$Slope <- as.factor(heartDiseaseDf$Slope)
+```
+
+Convert "<b>Old_Peak</b>" to numeric:
+```{r cpnvertOld_Peak}
+heartDiseaseDf$Old_Peak <- as.numeric(heartDiseaseDf$Old_Peak)
+```
+
+Convert "<b>CA</b>" to factor; it only have 5 values (1-5):
+```{r convertCA}
+heartDiseaseDf$CA <- as.factor(as.integer(heartDiseaseDf$CA))
+```
+
+Convert "<b>Thal</b>" to factor; it only have 3 values (3,6,7):
+```{r convertThal}
+heartDiseaseDf$Thal <- as.factor(as.integer(heartDiseaseDf$Thal))
+```
+
+Convert "<b>Diagnosis</b>" to factor; it only has 5 values:
+```{r convertDiagnosisFactor}
+heartDiseaseDf$Diagnosis <- as.factor(heartDiseaseDf$Diagnosis)
+```
+
+Get a summary of the data:
+```{r summaryAfter}
+summary(heartDiseaseDf)
+```
+
+***
+## Create Training and Test Data
+***
+Here we will split the data into a training set and a testing set.
+<br>We will use 70% of the data for training and 30% for testing.
+<br>We'll use R power to make sure the percentage of a diagnosis of having heart disease be the same in both sets.
+<br>Finally, confirm we have 70% in our training data:
+```{r createTrainTest, message = FALSE}
+require(caret)
+
+set.seed(769)
+inTrainRows <- createDataPartition(heartDiseaseDf$Diagnosis, p = 0.7, list = FALSE)
+heartDiseaseDfTrainData <- heartDiseaseDf[inTrainRows,]
+heartDiseaseDfTestData <-  heartDiseaseDf[-inTrainRows,]
+nrow(heartDiseaseDfTrainData)/(nrow(heartDiseaseDfTestData)+nrow(heartDiseaseDfTrainData)) 
+```
+
+***
+### Decision Tree
+Let's look at the decision tree, using the training data and "<b>rpart</b>":
+```{r decisionTree, message = FALSE, fig.width = 16, fig.height = 6}
+require(rpart)
+require(rpart.plot)
+
+fit <- rpart(Diagnosis ~ .,
+            data = heartDiseaseDfTrainData,
+            control = rpart.control(xval = 10, 
+                                    minbucket = 2, 
+                                    cp = 0), 
+             parms = list(split = "information"))
+rpart.plot(fit)
+```
+
+***
+## Training and Testing
+***
+Let's finally apply some machine learning algorithms to our dataset.
+
+***
+### Logistic Regression Model
+```{r logisticRRegressionModel, message = FALSE, warning = FALSE}
+require(pROC)
+
+AUC = list()
+Accuracy = list()
+
+logisticRegressionModel <- train(Diagnosis ~ ., data=heartDiseaseDfTrainData, method = 'glm', family = 'binomial')
+logisticRegressionPrediction <- predict(logisticRegressionModel, heartDiseaseDfTestData)
+logisticRegressionPredictionprob <- predict(logisticRegressionModel, heartDiseaseDfTestData, type = 'prob')[,2]
+logisticRegressionConfMatrix <- confusionMatrix(logisticRegressionPrediction, heartDiseaseDfTestData[,"Diagnosis"])
+
+AUC$logisticRegression <- roc(as.numeric(heartDiseaseDfTestData$Diagnosis), as.numeric(as.matrix((logisticRegressionPredictionprob))))$auc
+Accuracy$logisticRegression <- logisticRegressionConfMatrix$overall['Accuracy']
+```
+The accuracy is <b>`r Accuracy$logisticRegression`</b> and AUC is <b>`r AUC$logisticRegression`</b>. This is out of 1.0. These numbers look fantastic!
+<br>The confusion matix also looks great:
+```{r logisticRegressionModelConfusionMartix}
+logisticRegressionConfMatrix
+```
+
+### Random Forest Model
+Random Forests predictions are based on the generation of multiple classification trees. 
+<br>They can be used for both, classification and regression tasks. 
+<br>Here, I show a classification task:
+```{r randomForest, message = FALSE}
+require(randomForest)
+
+#set.seed(344) # A seed of 344 gave an accuracy of 0.9555556 and an AUC of 0.9820806. 
+
+  randomForestModel <- randomForest(Diagnosis ~ .,
+                            data = heartDiseaseDfTrainData,
+                            importance = TRUE,
+                            ntree = 2000)
+
+randomForestPrediction <- predict(randomForestModel, heartDiseaseDfTestData)
+randomForestPredictionprob = predict(randomForestModel, heartDiseaseDfTestData, type = "prob")[, 2]
+
+randomForestConfMatrix <- confusionMatrix(randomForestPrediction, heartDiseaseDfTestData[,"Diagnosis"])
+
+AUC$randomForest <- roc(as.numeric(heartDiseaseDfTestData$Diagnosis), as.numeric(as.matrix((randomForestPredictionprob))))$auc
+Accuracy$randomForest <- randomForestConfMatrix$overall['Accuracy']  
+```
+The accuracy is <b>`r Accuracy$randomForest`</b> and the AUC is <b>`r AUC$randomForest`</b>.
+<br>The confusion matix looks good:
+```{r randomForestConfMatrix}
+randomForestConfMatrix
+```
+
+### Boosted Classification Tree Model
+XGBoost is a tree ensemble model. 
+<br>This means it used the sum of predictions from a set of classification and regression trees (CART). 
+<br>XGBoost is similar to Random Forests but it uses a different approach to model training. 
+<br>It be used for classification and regression tasks.
+<br>Here, I show a classification task, with 10-fold cross-validation:
+```{r boostedClassificationTree, message = FALSE, warning = FALSE, fig.width = 20, fig.height = 20}
+require(caretEnsemble)
+require(xgboost)
+
+#set.seed(840) # A seed of 840 gives an accuracy of 0.9840717 and an AUC of 0.9555556.
+
+xgBoostModel <- train(Diagnosis ~ ., 
+                      data=heartDiseaseDfTrainData, 
+                      method = 'xgbTree',
+                      trControl = trainControl(method = 'cv', number = 10),
+                      verbose = F)
+
+trellis.par.set(caretTheme())
+plot(xgBoostModel)
+xgBoostPrediction <- predict(xgBoostModel, heartDiseaseDfTestData)
+xgBoostPredictionprob <- predict(xgBoostModel, heartDiseaseDfTestData, type = 'prob')[2]
+xgBoostConfMatrix <- confusionMatrix(xgBoostPrediction, heartDiseaseDfTestData[,"Diagnosis"])
+
+AUC$xgBoost <- roc(as.numeric(heartDiseaseDfTestData$Diagnosis), as.numeric(as.matrix((xgBoostPredictionprob))))$auc
+Accuracy$xgBoost <- xgBoostConfMatrix$overall['Accuracy'] 
+```
+The accuracy is <b>`r Accuracy$xgBoost`</b> and the AUC is <b>`r AUC$xgBoost`</b>.
+<br>The confusion matix looks OK.
+```{r boostedClassificationTreeConfMatrix}
+xgBoostConfMatrix
+```
+
+### Naive Bayes
+```{r naiveBayes, message = FALSE, warning = FALSE}
+require(e1071)
+
+naiveBayesModel <- naiveBayes(Diagnosis ~ ., data=heartDiseaseDfTrainData)
+naiveBayesPrediction <- predict(naiveBayesModel, heartDiseaseDfTestData)
+
+naiveBayesPredictionprob <- predict(naiveBayesModel, heartDiseaseDfTestData, type = 'raw')[,2]
+naiveBayesConfMatrix <- confusionMatrix(naiveBayesPrediction, heartDiseaseDfTestData[,"Diagnosis"])
+
+AUC$naiveBayes <- roc(as.numeric(heartDiseaseDfTestData$Diagnosis), as.numeric(as.matrix((naiveBayesPredictionprob))))$auc
+Accuracy$naiveBayes <- naiveBayesConfMatrix$overall['Accuracy']
+
+```
+The accuracy is <b>`r Accuracy$naiveBayes`</b> and the AUC is <b>`r AUC$naiveBayes`</b>.
+<br>The confusion matix looks OK.
+```{r naiveBayesConfMatrix}
+naiveBayesConfMatrix
+```
+
+### Stochastic Gradient Boosting
+Here we will use a 10-fold cross-validation:
+```{r stochasticGradientBoosting, message = FALSE, warning = FALSE}
+featureNames = names(heartDiseaseDf)
+
+for (f in featureNames) {
+  if (class(heartDiseaseDf[[f]]) == "factor") {
+    levels <- unique(c(heartDiseaseDf[[f]]))
+    heartDiseaseDf[[f]] <- factor(heartDiseaseDf[[f]],
+                   labels = make.names(levels))
+  }
+}
+
+# We did this before, but because we changed some of the values in the Data Set, we need to regenerate a new training and test data set.
+set.seed(769)
+inTrainRows <- createDataPartition(heartDiseaseDf$Diagnosis, p = 0.7, list = FALSE)
+heartDiseaseDfTrainData2 <- heartDiseaseDf[inTrainRows,]
+heartDiseaseDfTestData2 <-  heartDiseaseDf[-inTrainRows,]
+
+#set.seed(769)
+#769/052,Repats:1 0.9890493 0.9555556
+#769/769,Repats:1 0.9417621 0.8888889
+#769/769,Repats:2 0.9820806 0.9222222
+#769/769,Repats:3 0.9825784 0.9222222
+#769/769,Repats:4 0.9835739 0.9222222
+#769/769,Repats:5 0.9830762 0.9222222
+
+stochasticGradientBoostingModel <- train(Diagnosis ~ ., 
+                                         data = heartDiseaseDfTrainData2,
+                                         method = "gbm",
+                                         trControl = trainControl(method = "repeatedcv",
+                                                                  number = 10,
+                                                                  repeats = 4,
+                                                                  classProbs = TRUE,
+                                                                  summaryFunction = twoClassSummary),
+                                         verbose = FALSE,
+                                         tuneGrid = expand.grid(interaction.depth =  c(1, 5, 9),
+                                                                n.trees = (1:30)*50,
+                                                                shrinkage = 0.1,
+                                                                n.minobsinnode = 10),
+                                         metric = "ROC")
+
+stochasticGradientBoostingPrediction <- predict(stochasticGradientBoostingModel, heartDiseaseDfTestData2)
+stochasticGradientBoostingPredictionprob <- predict(stochasticGradientBoostingModel, heartDiseaseDfTestData2, type = 'prob')[2]
+stochasticGradientBoostingConfMatrix <- confusionMatrix(stochasticGradientBoostingPrediction, heartDiseaseDfTestData2[,"Diagnosis"])
+
+AUC$stochasticGradientBoosting <- roc(as.numeric(heartDiseaseDfTestData2$Diagnosis), as.numeric(as.matrix((stochasticGradientBoostingPredictionprob))))$auc
+Accuracy$stochasticGradientBoosting <- stochasticGradientBoostingConfMatrix$overall['Accuracy']
+```
+The accuracy is <b>`r Accuracy$stochasticGradientBoosting`</b> and the AUC is <b>`r AUC$stochasticGradientBoosting`</b>.
+<br>The confusion matix looks OK.
+```{r stochasticGradientBoostingConfMatrix}
+stochasticGradientBoostingConfMatrix
+```
+
+### Support Vector Machine
+Here we will use a 10-fold cross-validation:
+```{r supportVectorMachine, message = FALSE, warning = FALSE}
+set.seed(769)
+#769/769R1 0.9835739 0.9333333
+#769/769R2 0.9835739 0.9333333
+#769/769R3 0.9835739 0.9333333
+
+supportVectorMachineModel <- train(Diagnosis ~ ., data = heartDiseaseDfTrainData2,
+                                   method = "svmRadial",
+                                   trControl = trainControl(method = "repeatedcv",
+                                                            number = 10,
+                                                            repeats = 2,
+                                                            classProbs = TRUE,
+                                                            summaryFunction = twoClassSummary),
+                                   preProcess = c("center", "scale"),
+                                   tuneLength = 8,
+                                   metric = "ROC")
+supportVectorMachinePrediction <- predict(supportVectorMachineModel, heartDiseaseDfTestData2)
+supportVectorMachinePredictionprob <- predict(supportVectorMachineModel, heartDiseaseDfTestData2, type = 'prob')[2]
+supportVectorMachineConfMatrix <- confusionMatrix(supportVectorMachinePrediction, heartDiseaseDfTestData2[,"Diagnosis"])
+
+AUC$supportVectorMachine <- roc(as.numeric(heartDiseaseDfTestData2$Diagnosis), as.numeric(as.matrix((supportVectorMachinePredictionprob))))$auc
+Accuracy$supportVectorMachine <- supportVectorMachineConfMatrix$overall['Accuracy']
+```
+The accuracy is <b>`r Accuracy$supportVectorMachine`</b> and the AUC is <b>`r AUC$supportVectorMachine`</b>.
+<br>The confusion matix looks OK.
+```{r supportVectorMachineConfMatrix}
+supportVectorMachineConfMatrix
+```
+
+Let's compare the Area Under the ROC (AUC) and Accuracy between our machine learning models:
+```{r modelCompare}
+row.names <- names(Accuracy)
+col.names <- c("AUC", "Accuracy")
+cbind(as.data.frame(matrix(c(AUC,Accuracy), nrow = 6, ncol = 2,
+                           dimnames = list(row.names, col.names))))
+```
+
+## Conclusion
+For my final project, I used the UCI heart disease dataset's 14 predictor variables to try to predict a diagnosis of heart disease. 6 different machine learning algorithms were applied and compared: logistic regression, random forest, boosted trees (XG Boost), Naive Bayes,  Stochastic Gradient Boosting, and support vector machines. I used 70% of the data for training and 30% for testing the machine learning algorithms. 10-fold cross-validation was used to maximize the ROC (parameter tuning) for the training parameters of boosted trees and support vector machines.
+
+When comparing the accuracy and the area under the ROC of the model predictions, we see that logistic regression and random forest tied best for accuracy: 0.9555556. However, the ROC for logistic regression slightly beat out random forest by 0.0045, or a total ROC of 0.9845694. As such, logistic regression was the most appropriate choice for this classification problem. Tree-based methods with different tuning parameters performed slighly worse and took a much longer time to teach itself. XG Boost came in last with an accuracy of 0.8555556 and an ROC of 0.9223494.
+
+```{r sessionInfo}
+sessionInfo()
+```
